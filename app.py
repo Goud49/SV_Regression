@@ -20,7 +20,7 @@ st.title("💰 BigMart Sales Prediction - SV Regression")
 # Load and prepare data
 @st.cache_resource
 def load_and_train_model():
-    df = pd.read_csv('./archive (5)/Train.csv')
+    df = pd.read_csv('Train.csv')
     
     # Store original data for visualization
     original_df = df.copy()
