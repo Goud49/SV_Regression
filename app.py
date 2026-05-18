@@ -9,66 +9,93 @@ from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.svm import SVR
 from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error
 
-# Page Config
-st.set_page_config(page_title="SV Regression App", layout="wide")
+# ---------------- PAGE CONFIG ----------------
+st.set_page_config(
+    page_title="SV Regression App",
+    layout="wide"
+)
 
-# Title
+# ---------------- TITLE ----------------
 st.title("📈 Sales Prediction using SV Regression")
 
-# Upload Dataset
-uploaded_file = st.file_uploader("Upload CSV File", type=["csv"])
+# ---------------- FILE UPLOAD ----------------
+uploaded_file = st.file_uploader(
+    "Upload CSV File",
+    type=["csv"]
+)
 
 if uploaded_file is not None:
 
-    # Load Dataset
+    # ---------------- LOAD DATA ----------------
     df = pd.read_csv(uploaded_file)
 
-    st.subheader("Dataset Preview")
+    st.subheader("📄 Dataset Preview")
     st.dataframe(df.head())
 
-    # Dataset Info
-    st.subheader("Dataset Shape")
+    st.subheader("📏 Dataset Shape")
     st.write(df.shape)
 
-    # Missing Values
-    st.subheader("Missing Values")
+    st.subheader("❌ Missing Values")
     st.write(df.isnull().sum())
 
-    # Fill Missing Values
+    # ---------------- HANDLE MISSING VALUES ----------------
     for col in df.columns:
-        if df[col].dtype == 'object':
-            df[col] = df[col].fillna(df[col].mode()[0])
-        else:
+
+        # Numeric Columns
+        if pd.api.types.is_numeric_dtype(df[col]):
+
             df[col] = df[col].fillna(df[col].mean())
 
-    # Select Target Column
-    target_column = st.selectbox("Select Target Column", df.columns)
+        # Categorical/String Columns
+        else:
 
+            df[col] = df[col].fillna(df[col].mode()[0])
+
+    # ---------------- TARGET COLUMN ----------------
+    target_column = st.selectbox(
+        "🎯 Select Target Column",
+        df.columns
+    )
+
+    # ---------------- MODEL FUNCTION ----------------
     @st.cache_resource
-    def load_and_train_model(df, target_column):
+    def load_and_train_model(dataframe, target):
 
         # Features and Target
-        X = df.drop(columns=[target_column])
-        y = df[target_column]
+        X = dataframe.drop(columns=[target])
+        y = dataframe[target]
 
-        # Encode categorical columns
+        # Store Encoders
         le_dict = {}
 
-        for col in X.select_dtypes(include='object').columns:
-            le = LabelEncoder()
-            X[col] = le.fit_transform(X[col].astype(str))
-            le_dict[col] = le
+        # ---------------- ENCODE FEATURES ----------------
+        for col in X.columns:
 
-        # Convert target if object type
-        if y.dtype == 'object':
-            y_le = LabelEncoder()
-            y = y_le.fit_transform(y.astype(str))
+            if not pd.api.types.is_numeric_dtype(X[col]):
 
-        # Feature Scaling
+                le = LabelEncoder()
+
+                X[col] = le.fit_transform(
+                    X[col].astype(str)
+                )
+
+                le_dict[col] = le
+
+        # ---------------- ENCODE TARGET ----------------
+        if not pd.api.types.is_numeric_dtype(y):
+
+            y_encoder = LabelEncoder()
+
+            y = y_encoder.fit_transform(
+                y.astype(str)
+            )
+
+        # ---------------- FEATURE SCALING ----------------
         scaler = StandardScaler()
+
         X_scaled = scaler.fit_transform(X)
 
-        # Train Test Split
+        # ---------------- TRAIN TEST SPLIT ----------------
         X_train, X_test, y_train, y_test = train_test_split(
             X_scaled,
             y,
@@ -76,53 +103,92 @@ if uploaded_file is not None:
             random_state=42
         )
 
-        # Model
+        # ---------------- MODEL ----------------
         svr_model = SVR(kernel='rbf')
 
-        # Train Model
+        # ---------------- TRAIN ----------------
         svr_model.fit(X_train, y_train)
 
-        # Predictions
+        # ---------------- PREDICTION ----------------
         y_pred = svr_model.predict(X_test)
 
-        # Metrics
+        # ---------------- METRICS ----------------
         svr_r2 = r2_score(y_test, y_pred)
-        svr_mae = mean_absolute_error(y_test, y_pred)
-        svr_rmse = np.sqrt(mean_squared_error(y_test, y_pred))
 
-        return svr_model, scaler, le_dict, X.columns, svr_r2, svr_mae, svr_rmse
+        svr_mae = mean_absolute_error(
+            y_test,
+            y_pred
+        )
 
-    # Train Model
-    svr_model, scaler, le_dict, feature_cols, svr_r2, svr_mae, svr_rmse = load_and_train_model(df, target_column)
+        svr_rmse = np.sqrt(
+            mean_squared_error(y_test, y_pred)
+        )
 
-    # Display Metrics
+        return (
+            svr_model,
+            scaler,
+            le_dict,
+            X.columns,
+            svr_r2,
+            svr_mae,
+            svr_rmse
+        )
+
+    # ---------------- TRAIN MODEL ----------------
+    (
+        svr_model,
+        scaler,
+        le_dict,
+        feature_cols,
+        svr_r2,
+        svr_mae,
+        svr_rmse
+    ) = load_and_train_model(df, target_column)
+
+    # ---------------- PERFORMANCE ----------------
     st.subheader("📊 Model Performance")
 
     col1, col2, col3 = st.columns(3)
 
-    col1.metric("R² Score", round(svr_r2, 4))
-    col2.metric("MAE", round(svr_mae, 4))
-    col3.metric("RMSE", round(svr_rmse, 4))
+    col1.metric(
+        "R² Score",
+        round(svr_r2, 4)
+    )
 
-    # User Input Section
+    col2.metric(
+        "MAE",
+        round(svr_mae, 4)
+    )
+
+    col3.metric(
+        "RMSE",
+        round(svr_rmse, 4)
+    )
+
+    # ---------------- USER INPUT ----------------
     st.subheader("🔮 Make Prediction")
 
     input_data = {}
 
     for col in feature_cols:
 
-        if df[col].dtype == 'object':
+        # Categorical Input
+        if col in le_dict:
 
-            options = df[col].unique().tolist()
+            options = df[col].astype(str).unique().tolist()
 
-            value = st.selectbox(f"Select {col}", options)
+            selected_value = st.selectbox(
+                f"Select {col}",
+                options
+            )
 
-            # Encode input
-            le = le_dict[col]
-            value = le.transform([value])[0]
+            encoded_value = le_dict[col].transform(
+                [selected_value]
+            )[0]
 
-            input_data[col] = value
+            input_data[col] = encoded_value
 
+        # Numeric Input
         else:
 
             value = st.number_input(
@@ -132,7 +198,7 @@ if uploaded_file is not None:
 
             input_data[col] = value
 
-    # Prediction Button
+    # ---------------- PREDICTION BUTTON ----------------
     if st.button("Predict"):
 
         input_df = pd.DataFrame([input_data])
@@ -143,23 +209,26 @@ if uploaded_file is not None:
         # Predict
         prediction = svr_model.predict(input_scaled)
 
-        st.success(f"✅ Predicted Value: {prediction[0]:.2f}")
+        st.success(
+            f"✅ Predicted Value: {prediction[0]:.2f}"
+        )
 
-    # Correlation Heatmap
+    # ---------------- HEATMAP ----------------
     st.subheader("🔥 Correlation Heatmap")
 
     numeric_df = df.select_dtypes(include=np.number)
 
-    fig, ax = plt.subplots(figsize=(10, 6))
+    fig, ax = plt.subplots(figsize=(12, 6))
 
     sns.heatmap(
         numeric_df.corr(),
         annot=True,
-        cmap='coolwarm',
+        cmap="coolwarm",
         ax=ax
     )
 
     st.pyplot(fig)
 
 else:
+
     st.info("📂 Please upload a CSV file to continue.")
